@@ -1,0 +1,27 @@
+﻿query,intent
+Please create a new schedule for my dentist appointment on November 5th at 3 PM.,Create Schedules
+Set up a weekly team meeting every Monday at 10 AM.,Create RecurringSchedules
+Add a note to remind me to buy groceries.,Create Memos
+Remove my lunch appointment from the schedule for tomorrow.,Delete Schedules
+Cancel my weekly yoga class scheduled for Thursdays.,Delete RecurringSchedules
+Delete the memo about calling my friend.,Delete Memos
+Change my dentist appointment to November 12th at 4 PM.,Update Schedules
+Update my weekly team meeting to start at 11 AM instead of 10 AM.,Update RecurringSchedules
+Edit my grocery list memo to include eggs and milk.,Update Memos
+What appointments do I have scheduled for next week?,Query Schedules
+Show me all my recurring events.,Query RecurringSchedules
+What do I need to remember about my upcoming vacation?,Query Memos
+Add a meeting with the marketing team on December 1st at 2 PM.,Create Schedules
+Schedule a monthly review meeting on the first Friday of every month at 3 PM.,Create RecurringSchedules
+Write a memo to check the status of the project by next week.,Create Memos
+Please delete my appointment with the financial advisor for November 10th.,Delete Schedules
+Cancel my bi-weekly fitness class that occurs on Wednesdays.,Delete RecurringSchedules
+Remove the memo about the conference call next month.,Delete Memos
+Change my project deadline meeting to November 15th at 4 PM.,Update Schedules
+Adjust my weekly staff meeting to Tuesday at 9 AM instead of Wednesday.,Update RecurringSchedules
+Revise the memo to include the new project guidelines.,Update Memos
+What appointments do I have scheduled for next Thursday?,Query Schedules
+List all my recurring appointments for the month.,Query RecurringSchedules
+What notes do I have regarding the marketing strategy?,Query Memos
+What’s the weather like today?,Intent not found
+"Hi, how are you?",Intent not found
