@@ -1,0 +1,27 @@
+# Database parameters
+
+database:
+  user: root
+  password: q1w2e3r4
+  host: localhost
+  name: llm_asst
+  port: 3306
+
+
+intent_llm_model: llama3.1
+text2sql_llm_model: llama3.1
+
+embed_model: "nomic-embed-text"
+semantic_search_k: 5
+
+operation_types:
+  - create
+  - update
+  - delete
+  - search
+
+tables:
+  - Schedules
+  - RecurringSchedules
+  - Memos
+
