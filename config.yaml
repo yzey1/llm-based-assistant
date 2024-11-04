@@ -20,8 +20,13 @@ operation_types:
   - delete
   - search
 
-tables:
-  - Schedules
-  - RecurringSchedules
-  - Memos
+task_types:
+  - schedule
+  - memo
 
+paths:
+  data_input: "data/"
+  logging_file: "logs/application.log"
+  csv_output: "data/csv/"
+  faiss_db: "faiss_db/"
+  chroma_db: "chroma_db/"

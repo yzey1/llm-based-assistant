@@ -4,16 +4,16 @@ import yaml
 from langchain_ollama.llms import OllamaLLM
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
-from db_utils import DBOperator
+from sql_db_operator import DBOperator
 
-# 设置日志
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 logging.basicConfig(level=logging.INFO)
 
 class TextToSQL:
     def __init__(self):
         self.config = self.load_config('config.yaml')
         self.db_manager = DBOperator()
-        self.llm = OllamaLLM(model=self.config['text2sql_llm_model'])
+        self.llm = OllamaLLM(model=self.config['text2sql_llm_model'],temperature=0.6)
         self.setup_prompt()
 
     def load_config(self, config_file):
@@ -22,21 +22,18 @@ class TextToSQL:
         
     def setup_prompt(self):
         
-        sys_prompt = """Convert the user request to a SQL query. 
-        The table schema is as follows:{schema}
-        """
+        sys_prompt = """You are a SQL query generator. Given the following database schema:{schema}"""
 
         human_prompt = """
+        ### Instructions:
+        The operation type is: {intent_operation}
+        The related data to consider is: {pk}: {retrieved_ids}
+        The table name is: {intent_table}
         
-        Instructions:
-        - Check if the user request can be filter by time-format field.
-        - If yes, generate a SQL query directly to {intent_operation} data by time.
-        - If no, generate a SQL query to {intent_operation} on records whose {pk} in {retrieved_ids}.
-        
+        ### Your task:
         User request: {user_query}.
-        No preamble and explanation. Just the SQL query.
+        No preamble and explanation. Just the SQL.
         SQL statement:
-
         """
 
         messages = [("system", sys_prompt), ("human", human_prompt)]
@@ -63,29 +60,27 @@ class TextToSQL:
         return sql_statement
 
     def execute_sql(self, sql_statement):
-        return self.db_manager.run(sql_statement)
+        return self.db_manager.run_sql_statement(sql_statement)
+    
 
-def main():
-    # 初始化 TextToSQL
+if __name__ == "__main__":
+    # Initialize
     text_to_sql = TextToSQL()
 
-    # 示例查询
-    input_query = "Please remove my appointment from the schedule."
-    intent_operation = "delete"
+    # Examples
+    input_query = "i will have a meeting tomorrow 3 pm with my team, add to schedule"
+    intent_operation = "insert"
     intent_table = "Schedules"
     retrieved_ids = [1, 2, 3]
 
     sql_statement = text_to_sql.convert_to_sql(input_query, intent_operation, intent_table, retrieved_ids)
 
     if sql_statement:
-        logging.info(f"生成的 SQL 语句: {sql_statement}")
+        logging.info(f"Generatede SQL Statement: {sql_statement}")
         response = text_to_sql.execute_sql(sql_statement)
         if response:
-            logging.info(f"查询结果: {response}")
+            logging.info(f"Respones: {response}")
         else:
-            logging.info("未找到匹配的记录")
+            logging.info("SQL Statement not executed")
     else:
-        logging.info("未生成有效的 SQL 语句")
-
-if __name__ == "__main__":
-    main()
+        logging.info("SQL Statement not valid")

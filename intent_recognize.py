@@ -1,17 +1,19 @@
 import re
+import os
 import yaml
 import logging
 import pandas as pd
 from langchain_ollama.llms import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 
+os.environ["LANGCHAIN_API_KEY"] = "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"
 logging.basicConfig(level=logging.INFO)
 
 class IntentRecognizer:
     def __init__(self, input_query):
         self.config = self.load_config('config.yaml')
-        self.llm = OllamaLLM(model=self.config["intent_llm_model"])
-        self.tables_set = set(self.config['tables'])
+        self.llm = OllamaLLM(model=self.config["intent_llm_model"], top_p=0.6)
+        self.task_types = set(self.config['task_types'])
         self.op_types = self.config['operation_types']
         self.input_query = input_query
         self.setup_prompts()
@@ -27,14 +29,14 @@ class IntentRecognizer:
             ("human", "{input}")
         ])
         
-        self.table_prompt = ChatPromptTemplate.from_messages([
-            ("system", self.generate_table_template()),
+        self.task_prompt = ChatPromptTemplate.from_messages([
+            ("system", self.generate_task_template()),
             ("human", "{input}")
         ])
         
 
 
-    def generate_table_template(self):
+    def generate_task_template(self):
         # return f"""
         # ### Examples:
         # Query: 'Please remove my appointment from the schedule.'
@@ -54,10 +56,18 @@ class IntentRecognizer:
         # Table Name: 
         # """
         return f"""
+        ### Examples:
+        Query: "Can you update the schedule for the project kickoff?"
+        Answer: schedule
+        Query: "Draft a memo to inform the team about the upcoming training."
+        Answer: memo
+        
         ### Instructions:
-        Determine whether the user query is related to one of the tables: [{', '.join(self.tables_set)}]
-        (Schedules: happens once, RecurringSchedules: happens repeatedly, Memos: notes)
-        Reply with only the table name or "False" if no relevant table is found.
+        Classify the following user query as related to schedule or memo:
+        Schedules have specific times for planned events, while memos are notes without time.
+        Reply with only the task type or "False" if no relevance is found.
+        
+        ### Your task:
         Query: {{input}}
         Table Name: 
         """
@@ -85,15 +95,15 @@ class IntentRecognizer:
         Operation Type:
         """
     
-    def check_table_relevance(self):
-        chain = self.table_prompt | self.llm
-        return self.extract_valid_answer(chain, valid_set=self.tables_set)
+    def check_task_relevance(self):
+        chain = self.task_prompt | self.llm
+        return self.extract_valid_answer(chain, valid_set=self.task_types)
 
     def identify_operation_type(self):
         chain = self.operation_prompt | self.llm
         return self.extract_valid_answer(chain, valid_set=self.op_types)
 
-    def extract_valid_answer(self, chain, valid_set=None, valid_threshold=3, max_attempts=5):
+    def extract_valid_answer(self, chain, valid_set=None, valid_threshold=1, max_attempts=5):
         """Extracts a valid answer, ensuring consistency across multiple attempts."""
         answer_counts = {}
         attempts = 0
@@ -117,19 +127,20 @@ class IntentRecognizer:
         return None  # Return None if no consistent valid answer is found after max attempts
 
     def identify_intents(self):
-        table = self.check_table_relevance()
-        if not table:
+        task_type = self.check_task_relevance()
+        if not task_type:
             return False, None  # No relevance, skip further steps
         operation_type = self.identify_operation_type()
-        return table, operation_type
+        return task_type, operation_type
 
 if __name__ == "__main__":
     
     # input_query = "Can you show the meetings for last month?"
-    input_query = "Please add a weekly team meeting every monday."
+    # input_query = "what is my appointment for today?"
+    input_query = "Can you update the schedule for the project kickoff?"
     recognizer = IntentRecognizer(input_query)
-    operation_type, table_name = recognizer.identify_intents()
+    task_type, operation_type = recognizer.identify_intents()
 
-    print(f"Table Name: {operation_type}")
-    print(f"Operation Type: {table_name}")
+    print(f"Task Type: {task_type}")
+    print(f"Operation Type: {operation_type}")
     
