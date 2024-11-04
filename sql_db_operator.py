@@ -134,13 +134,10 @@ class SQLDBOperator:
         """Convert a list of SQLAlchemy objects to a list of strings."""
         return [self.object_as_str(obj) for obj in obj_list]
         
-    def get_table_info(self, table_name=None):
-        """Get information about a specific table."""
+    def get_schema(self, table_name):
+        """Get the schema of the specified table."""
         inspector = inspect(self.engine)
-        if table_name:
-            return inspector.get_columns(table_name)
-        else:
-            return inspector.get_table_names()
+        return inspector.get_columns(table_name)
 
     def get_pk(self, table_name=None):
         """Get the primary key of a specified table."""
@@ -163,6 +160,27 @@ class SQLDBOperator:
         df.to_csv(output_file, index=False)
         logging.info(f"Data exported to {output_file}")
         print(f"Data exported to {output_file}")
+    
+    def run_sql_statement(self, sql, operation_type):
+        with self.engine.connect() as connection:
+            try:
+                result = connection.execute(text(sql))
+                if operation_type == "search":
+                    column = result.keys()
+                    row = result.fetchall()
+                    records = [dict(zip(column, r)) for r in row]
+                    # convert each record to a string (no brackets, quotes, etc.)
+                    string_records = []
+                    for record in records:
+                        string_records.append(", ".join([f"{key}: {value}" for key, value in record.items()]))
+
+                    return {"status": 1, "response": string_records}
+                else:
+                    return {"status": 1, "response": f"{operation_type} successful"}
+            except Exception as e:
+                logging.error(f"Error executing SQL statement: {str(e)}")
+                return {"status": 0, "message": str(e)}
+        
         
         
 if __name__ == '__main__':
@@ -173,7 +191,14 @@ if __name__ == '__main__':
     # print(result)
     # print(db_manager.db.dialect)
     
-    for tbl_name in ["memo", "schedule", "event"]:
-        tbl = sql_operator.select(tbl_name)
-        tbl = sql_operator.object_list_as_str(tbl['data'])
-        print(tbl)
+    # for tbl_name in ["memo", "schedule", "event"]:
+    #     tbl = sql_operator.select(tbl_name)
+    #     tbl = sql_operator.object_list_as_str(tbl['data'])
+    #     print(tbl)
+    
+    # schema = sql_operator.get_schema('event')
+    # print(schema)
+    
+    sql_statement = 'SELECT e.title, s.start_time, s.end_time \nFROM event e \nJOIN schedule s ON e.event_id = s.event_id \nWHERE s.start_time >= NOW() AND s.start_time <= DATE_ADD(NOW(), INTERVAL 7 DAY);'
+    result = sql_operator.run_sql_statement(sql_statement, "search")
+    print(result)

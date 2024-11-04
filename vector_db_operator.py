@@ -202,7 +202,10 @@ class VectorDBOperator:
     
     def search(self, query: str, table_name: str=None):
         """Search for similar documents in the vector database."""
-        results = self.vector_db.search_documents(query, k=self.top_k, filter={"tbl_name": table_name}, score_threshold=0.3)
+        if table_name:
+            results = self.vector_db.search_documents(query, k=self.top_k, filter={"tbl_name": table_name}, score_threshold=0.3)
+        else:
+            results = self.vector_db.search_documents(query, k=self.top_k, score_threshold=0.3)
         return results
     
         
