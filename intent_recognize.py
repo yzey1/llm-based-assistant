@@ -6,7 +6,7 @@ import pandas as pd
 from langchain_ollama.llms import OllamaLLM
 from langchain_core.prompts import ChatPromptTemplate
 
-os.environ["LANGCHAIN_API_KEY"] = "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"
+os.environ["LANGCHAIN_API_KEY"] = ""
 logging.basicConfig(level=logging.INFO)
 
 class IntentRecognizer:
@@ -126,7 +126,7 @@ class IntentRecognizer:
 
         return None  # Return None if no consistent valid answer is found after max attempts
 
-    def identify_intents(self):
+    def get_intents(self):
         task_type = self.check_task_relevance()
         if not task_type:
             return False, None  # No relevance, skip further steps
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     # input_query = "what is my appointment for today?"
     input_query = "Can you update the schedule for the project kickoff?"
     recognizer = IntentRecognizer(input_query)
-    task_type, operation_type = recognizer.identify_intents()
+    task_type, operation_type = recognizer.get_intents()
 
     print(f"Task Type: {task_type}")
     print(f"Operation Type: {operation_type}")
