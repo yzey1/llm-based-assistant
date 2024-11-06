@@ -5,8 +5,8 @@ import re
 from langchain_ollama.llms import OllamaLLM
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
-from sql_db_operator import SQLDBOperator
-from vector_db_operator import VectorDBOperator
+from sqldb import SQLDBOperator
+from vectordb import VectorDBOperator
 
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 logging.basicConfig(level=logging.INFO)

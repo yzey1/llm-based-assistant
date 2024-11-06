@@ -1,72 +1,116 @@
-from sql_db_operator import SQLDBOperator
-from vector_db_operator import VectorDBOperator
-from intent_recognize import IntentRecognizer
+import time
+import os
+import gradio as gr
+from sqldb import SQLDBOperator
+from vectordb import VectorDBOperator
+from intent import IntentRecognizer
 from text2sql import TextToSQL
 from chat_llm import ChatLLM
 
+
+# decorator for timing
+def timing(func):
+    def wrapper(*args, **kwargs):
+        start_t = time.time()
+        result = func(*args, **kwargs)
+        end_t = time.time()
+        print(f"{func.__name__} finished, time elapsed: {end_t - start_t}")
+        return result
+    return wrapper
+
+@timing
 def get_intent(input_query):
     recognizer = IntentRecognizer(input_query)
-    return recognizer.get_intents()
+    task_type, operation_type, info = recognizer.get_intents()
+    return task_type, operation_type, info
 
-def infer_process(input_query):
+@timing
+def semantic_search(input_query, vector_db_operator):
+    retrieval = vector_db_operator.search(input_query)
+    relevant_docs = [record[0] for record in retrieval]
+    relevant_record_id = vector_db_operator.get_id_by_doc(relevant_docs)
+    return relevant_record_id
+
+@timing
+def manipulate_database(operation_type: str, task_type: str, info: dict, relevant_record_id: list, db_operator: SQLDBOperator, vector_db_operator: VectorDBOperator):
+    if operation_type == "insert":
+        new_item = db_operator.create_item(info)
+        new_doc = vector_db_operator.create_documents([new_item])
+        vector_db_operator.insert(new_doc)
+        return {"status": "success", "message": "Item inserted successfully"}
+    else:
+        search_filter = {"item_id": relevant_record_id, **info}
+        if "content" in search_filter:
+            search_filter.pop("content")
+        sql_search_response = db_operator.get_items(**search_filter)
+        match_items = sql_search_response['data']
+        reponsed_items_id = [record['item_id'] for record in match_items]
+        
+        if operation_type == "delete":
+            sql_response = db_operator.delete_items(reponsed_items_id)
+            vector_db_operator.delete(reponsed_items_id)
+            return sql_response
+        elif operation_type == "update":
+            sql_response = db_operator.update_items(reponsed_items_id, info)
+            vector_db_operator.update(reponsed_items_id, info)
+            return sql_response
+        elif operation_type == "search":
+            # convert match_items to a human-readable string
+            match_items_str = "; ".join([", ".join([f"{k}: {v}" for k, v in item.items()]) for item in match_items])
+            sql_search_response["message"] = match_items_str
+            return sql_search_response
+
+@timing
+def generate_response(input_query, operation_type, task_type, sql_response, history=None):
+    chat_llm = ChatLLM(input_query, operation_type, task_type, sql_response, history)
+    response = chat_llm.generate_response(input_query)
+    return response
+
+@timing
+def main(input_query, history=None):
+    print("Inferencing...")
     
-    # initialize
+    # initialize db operators
     db_operator = SQLDBOperator()
     vector_db_operator = VectorDBOperator(db_operator, vector_db_type="faiss")
     
     # step 1: get intent
-    task_type, operation_type = get_intent(input_query)
+    task_type, operation_type, info = get_intent(input_query)
     if not task_type or not operation_type:
-        return None, None, None
-    else:
-        print(f"Task Type: {task_type}")
-        print(f"Operation Type: {operation_type}")
-    
-    search_table_name = None
-    if task_type == "schedule":
-        search_table_name = "event"
-    elif task_type == "memo":
-        search_table_name = "memo"
+        # skip 2-3, directly return response
+        return generate_response(input_query, operation_type, task_type, None, history)
+    print(f"Task: {task_type}, Operation: {operation_type}, Info: {info}")
+    print("====================================")
     
     # step 2: semantic search
-    relevant_docs = vector_db_operator.search(input_query, search_table_name)
-    print(relevant_docs)
+    relevant_record_id = semantic_search(input_query, vector_db_operator)
+    print(f"Relevant item: {relevant_record_id}")
+    print("====================================")
     
-    # step 3: convert to SQL
-    sql_converter = TextToSQL(input_query, operation_type, task_type)
-    sql_statement = sql_converter.convert_to_sql()
-    print(sql_statement)
+    # step 3: manipulate Database
+    sql_response = manipulate_database(operation_type, task_type, info, relevant_record_id, db_operator, vector_db_operator)
+    print(f"SQL Response: {sql_response}")
+    print("====================================")
     
-    # step 4: execute SQL
-    sql_response = db_operator.run_sql_statement(sql_statement, operation_type)
-    print(sql_response)
-    
-    # step 5: manipulate vector db
-    # if operation_type == "create":
-    #     vector_db_operator.insert(input_query, search_table_name)
-    # elif operation_type == "update":
-    #     vector_db_operator.update(input_query, search_table_name)
-    # elif operation_type == "delete":
-    #     vector_db_operator.delete(input_query, search_table_name)
-    # elif operation_type == "search":
-    #     pass
-        
-    return task_type, operation_type, sql_response
-
-def main(input_query=None):
-    task_type, operation_type, sql_response = infer_process(input_query)
-    chat_llm = ChatLLM(input_query, operation_type, task_type, sql_response)
-    response = chat_llm.generate_response(input_query)
+    # step 4: generate response
+    response = generate_response(input_query, operation_type, task_type, sql_response, history)
     print(response)
+    print("====================================")
     
     return response
 
+# Gradio chat interface
+def gradio_interface(user_input, history):
+    # Get the response from the main function
+    response = main(user_input, history)
+    
+    return response
+
+# Create the Gradio interface
+iface = gr.ChatInterface(fn=gradio_interface, type="messages")
+
 if __name__ == "__main__":
-    
-    input_query = "Can you show the meetings for next week?"
-    # input_query = "Please remove my appointment from the schedule."
-    # input_query = "Are you happy today?"
-    
-    res = main(input_query)
-    # print(res)
-    print("Done!")
+    # iface.launch()
+    input = "show me recent meetings"
+    response = main(input)
+    print(response)

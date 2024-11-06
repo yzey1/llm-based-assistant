@@ -23,7 +23,7 @@ operation_types:
 
 task_types:
   - schedule
-  - memo
+  - note
 
 paths:
   data_input: "data/"
