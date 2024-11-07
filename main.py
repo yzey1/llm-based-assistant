@@ -7,6 +7,9 @@ from intent import IntentRecognizer
 from text2sql import TextToSQL
 from chat_llm import ChatLLM
 
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = "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"
+os.environ["LANGCHAIN_PROJECT"] = "personal-asst"
 
 # decorator for timing
 def timing(func):

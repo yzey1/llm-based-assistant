@@ -1,11 +1,7 @@
 # Database parameters
 
 database:
-  user: root
-  password: q1w2e3r4
-  host: localhost
   name: llm_asst
-  port: 3306
 
 
 intent_llm_model: llama3.1

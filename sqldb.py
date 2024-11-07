@@ -3,9 +3,9 @@ import yaml
 import re
 import parsedatetime as pdt
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy import create_engine, inspect
-from sqlalchemy import Column, Integer, String, Text, Enum, Date, Time, TIMESTAMP, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Date, Time, TIMESTAMP, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy.sql import func, text
 
@@ -15,7 +15,7 @@ class recurrence(Base):
     __tablename__ = 'recurrence'
     
     recurrence_id = Column(Integer, primary_key=True, autoincrement=True)
-    recurrence_pattern = Column(Enum('DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY'), nullable=False)
+    recurrence_pattern = Column(String, nullable=False)  # Changed from ENUM to String
     recurrence_rule = Column(Integer, nullable=False)
     
     __table_args__ = (
@@ -28,8 +28,8 @@ class item(Base):
     item_id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(100), default=None)
     content = Column(Text, nullable=False)
-    item_type = Column(Enum('NOTE', 'EVENT'), nullable=False, default='NOTE')
-    item_status = Column(Enum('ACTIVE', 'CANCELLED', 'COMPLETED'), default='ACTIVE')
+    item_type = Column(String, nullable=False, default='NOTE')  # Changed from ENUM to String
+    item_status = Column(String, default='ACTIVE')  # Changed from ENUM to String
     recurrence_id = Column(Integer, ForeignKey('recurrence.recurrence_id'), default=None)
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
@@ -41,22 +41,22 @@ class schedule(Base):
     
     schedule_id = Column(Integer, primary_key=True, autoincrement=True)
     item_id = Column(Integer, ForeignKey('item.item_id'), nullable=False)
-    start_date = Column(Date, nullable=False)  # Changed from TIMESTAMP to Date
-    start_time = Column(Time, nullable=False)   # Changed from TIMESTAMP to Time
-    end_date = Column(Date, nullable=False)      # New column for end date
-    end_time = Column(Time, nullable=False)      # New column for end time
+    start_date = Column(Date, nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_date = Column(Date, nullable=False)
+    end_time = Column(Time, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     
     item = relationship('item', backref='schedules')
-    
+
 # Define the SQLDBOperator class
 class SQLDBOperator:
     def __init__(self):
         self.config = self.load_config('config.yaml')
         db_config = self.config['database']
-        mysql_url = f"mysql+pymysql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['name']}"
-        self.engine = create_engine(mysql_url)
+        sqlite_url = f"sqlite:///{db_config['name']}.db"  # SQLite connection string
+        self.engine = create_engine(sqlite_url)
         self.Session = sessionmaker(bind=self.engine)
 
         logging.basicConfig(filename=self.config['paths']['logging_file'], level=logging.INFO)
@@ -75,7 +75,6 @@ class SQLDBOperator:
         """Get the primary key of a specified table."""
         inspector = inspect(self.engine)
         if table_name is None:
-            # get pk for all tables
             return {table: inspector.get_pk_constraint(table)['constrained_columns'] for table in inspector.get_table_names()}
         else:
             return inspector.get_pk_constraint(table_name)['constrained_columns']
@@ -90,8 +89,10 @@ class SQLDBOperator:
             recurrence_pattern=data['recurrence_pattern'],
             recurrence_rule=data['recurrence_rule']
         )
-        self.Session.add(new_recurrence)
-        self.Session.flush()  # get recurrence_id
+        session = self.Session()
+        session.add(new_recurrence)
+        session.flush()  # get recurrence_id
+        session.commit()
         return new_recurrence
     
     def parse_date_time(self, date_time_string):
@@ -115,41 +116,38 @@ class SQLDBOperator:
         # get the recurrence pattern and rule if they exist
         recurrence_obj = None
         if data['recurrence_pattern']:
-            # check if recurrence already exists
             recurrence_obj = self.Session.query(recurrence).filter_by(
                 recurrence_pattern=data['recurrence_pattern'],
                 recurrence_rule=data['recurrence_rule']
             ).first()
             if not recurrence_obj:
-                # create a new recurrence
                 recurrence_obj = self.create_recurrence(data)
         
         recurrence_id = recurrence_obj.recurrence_id if recurrence_obj else None
         item_type = 'EVENT' if data['start_date'] else 'NOTE'
         
-        # create a new item
         new_item = item(
             title=data['content'],
             content=data['content'],
             item_type=item_type,
             recurrence_id=recurrence_id
         )
-        self.Session.add(new_item)
-        self.Session.flush()  # get item_id
-
+        session = self.Session()
+        session.add(new_item)
+        session.flush()  # get item_id
+        
         if item_type == 'EVENT':
             self.create_schedule(new_item.item_id, data)
         
+        session.commit()
         return new_item
 
     def create_schedule(self, item_id, data):
-        # parse the date and time
         start_date = self.parse_date_time(data['start_date'])
         start_time = self.parse_date_time(data['start_time']) if data['start_time'] else None
         end_date = self.parse_date_time(data['end_date']) if data['end_date'] else None
         end_time = self.parse_date_time(data['end_time']) if data['end_time'] else None
         
-        # create a new schedule
         new_schedule = schedule(
             item_id=item_id,
             start_date=start_date,
@@ -157,8 +155,9 @@ class SQLDBOperator:
             end_date=end_date,
             end_time=end_time
         )
-        self.Session.add(new_schedule)
-        self.Session.commit()
+        session = self.Session()
+        session.add(new_schedule)
+        session.commit()
         
         return new_schedule
     
@@ -237,7 +236,6 @@ class SQLDBOperator:
         finally:
             session.close()
             
-            
     def update_items(self, item_ids, updates):
         """Update items in the database."""
         session = self.Session()
@@ -251,7 +249,6 @@ class SQLDBOperator:
         finally:
             session.close()
             
-        
     def object_as_dict(self, obj):
         """Convert a SQLAlchemy object to a dictionary."""
         return {c.key: getattr(obj, c.key) for c in obj.__table__.columns}
@@ -260,16 +257,8 @@ class SQLDBOperator:
         """Convert a list of SQLAlchemy objects to a list of dictionaries."""
         return [self.object_as_dict(obj) for obj in obj_list]
     
-    def object_as_str(self, obj):
-        """Convert a SQLAlchemy object to a string."""
-        return ", ".join([f"{key}: {value}" for key, value in self.object_as_dict(obj).items()])
-    
-    def object_list_as_str(self, obj_list):
-        """Convert a list of SQLAlchemy objects to a list of strings."""
-        return [self.object_as_str(obj) for obj in obj_list]
-
     def export_to_csv(self, query, csv_file):
-        """Export data from the MySQL database to a CSV file."""
+        """Export data from the SQLite database to a CSV file."""
         df = pd.read_sql(query, self.engine)
         output_file = self.config['paths']['csv_output'] + csv_file
         df.to_csv(output_file, index=False)
@@ -284,43 +273,23 @@ class SQLDBOperator:
                     column = result.keys()
                     row = result.fetchall()
                     records = [dict(zip(column, r)) for r in row]
-                    # convert each record to a string (no brackets, quotes, etc.)
-                    string_records = []
-                    for record in records:
-                        string_records.append(", ".join([f"{key}: {value}" for key, value in record.items()]))
-                    return {"status": 1, "response": string_records}
-                elif operation_type == "create":
-                    # get the primary key of the newly inserted record
+                    return {"status": 1, "response": records}
+                elif operation_type in ["create", "update"]:
                     pk = result.lastrowid
                     return {"status": 1, "response": f"{operation_type} successful. Primary key: {pk}"}
                 elif operation_type == "delete":
-                    # get the number of rows deleted
                     num_rows_deleted = result.rowcount
                     return {"status": 1, "response": f"{operation_type} successful. Rows deleted: {num_rows_deleted}"}
-                elif operation_type == "update":
-                    # get the primary key of the updated record
-                    pk = result.lastrowid
-                    return {"status": 1, "response": f"{operation_type} successful. Primary key: {pk}"}
             except Exception as e:
                 logging.error(f"Error executing SQL statement: {str(e)}")
                 return {"status": 0, "message": str(e)}
-        
-        
-        
+
 if __name__ == '__main__':
     sql_operator = SQLDBOperator()
     
     # test get_items
     items = sql_operator.get_items(content='meeting', search_time_frame='next week')
     print(items)
-    
-    # test get_items by actual data
-    task_type = 'schedule'
-    operation_type = 'search'
-    info = {'content': 'meeting', 'search_time_frame': 'next week'}
-    info['item_id'] = [1, 2, 3, 4]
-    sql_response = sql_operator.get_items(**info)
-    print(sql_response)
     
     # test delete_items
     item_ids = [1, 2, 3]
@@ -332,5 +301,3 @@ if __name__ == '__main__':
     updates = {'content': 'updated content'}
     result = sql_operator.update_items(item_ids, updates)
     print(result)
-    
-    
